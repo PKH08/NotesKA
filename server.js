@@ -50,3 +50,17 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`NotesKA server running on port ${PORT}`);
 });
+
+let auth;
+
+if (process.env.GOOGLE_JSON_KEY) {
+  auth = new google.auth.GoogleAuth({
+    credentials: JSON.parse(process.env.GOOGLE_JSON_KEY),
+    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
+  });
+} else {
+  auth = new google.auth.GoogleAuth({
+    keyFile: path.join(__dirname, 'service-account-key.json'),
+    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
+  });
+}
