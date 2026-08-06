@@ -32,10 +32,10 @@
       justify-content: center;
     }
 
-    .app-layout {
+    .app-container {
       width: 100%;
-      max-width: 1100px;
-      margin: 30px 20px;
+      max-width: 800px;
+      margin: 40px 20px;
       display: flex;
       flex-direction: column;
       gap: 20px;
@@ -46,6 +46,7 @@
       display: flex;
       align-items: center;
       gap: 12px;
+      margin-bottom: 8px;
     }
 
     .brand-logo {
@@ -77,62 +78,6 @@
       margin: 2px 0 0 0;
     }
 
-    /* Ad Container Styling */
-    .ad-slot {
-      background-color: #ffffff;
-      border: 1px dashed #cccccc;
-      border-radius: var(--md-shape-corner-medium);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      box-sizing: border-box;
-      overflow: hidden;
-      margin-bottom: 8px;
-    }
-
-    .ad-label {
-      font-size: 10px;
-      font-weight: 500;
-      color: #9e9e9e;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      padding: 4px;
-    }
-
-    .ad-top-banner {
-      width: 100%;
-      min-height: 90px;
-    }
-
-    .ad-sidebar {
-      width: 300px;
-      min-height: 250px;
-    }
-
-    .ad-bottom-banner {
-      width: 100%;
-      min-height: 90px;
-    }
-
-    /* Main Grid Layout (Directory + Sidebar Ad) */
-    .main-grid {
-      display: grid;
-      grid-template-columns: 1fr 300px;
-      gap: 24px;
-      align-items: start;
-    }
-
-    @media (max-width: 850px) {
-      .main-grid {
-        grid-template-columns: 1fr;
-      }
-      .ad-sidebar {
-        width: 100%;
-      }
-    }
-
     /* Breadcrumbs Navigation */
     .breadcrumbs {
       display: flex;
@@ -146,7 +91,6 @@
       border: 1px solid var(--md-sys-color-outline);
       width: fit-content;
       flex-wrap: wrap;
-      margin-bottom: 16px;
     }
 
     .breadcrumb-item {
@@ -223,7 +167,7 @@
       color: var(--md-sys-color-on-surface);
     }
 
-    /* Buttons */
+    /* Action Buttons */
     .action-btn {
       display: inline-flex;
       align-items: center;
@@ -277,7 +221,7 @@
 </head>
 <body>
 
-  <div class="app-layout">
+  <div class="app-container">
     
     <!-- Brand Header -->
     <div class="brand-header">
@@ -290,48 +234,16 @@
       </div>
     </div>
 
-    <!-- 1. TOP LEADERBOARD AD SECTION -->
-    <div class="ad-slot ad-top-banner">
-      <span class="ad-label">Advertisement</span>
-      <div style="color: #888; font-size: 13px; padding: 15px;">
-        [ Top Ad Space - 728x90 / Responsive ]
-      </div>
+    <!-- Navigation Breadcrumbs -->
+    <div class="breadcrumbs" id="breadcrumbs">
+      <!-- Injected via JavaScript -->
     </div>
 
-    <!-- Main Content Area with Sidebar -->
-    <div class="main-grid">
-      
-      <!-- Left Column: Navigation & Drive Files -->
-      <div>
-        <div class="breadcrumbs" id="breadcrumbs">
-          <!-- Injected via JavaScript -->
-        </div>
-
-        <div class="content-card">
-          <ul class="item-list" id="file-list">
-            <!-- Dynamic Directory List -->
-          </ul>
-        </div>
-      </div>
-
-      <!-- Right Column: SIDEBAR AD SECTION -->
-      <div>
-        <div class="ad-slot ad-sidebar">
-          <span class="ad-label">Advertisement</span>
-          <div style="color: #888; font-size: 13px; padding: 20px;">
-            [ Sidebar Ad Space - 300x250 Medium Rectangle ]
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- 3. BOTTOM BANNER AD SECTION -->
-    <div class="ad-slot ad-bottom-banner">
-      <span class="ad-label">Advertisement</span>
-      <div style="color: #888; font-size: 13px; padding: 15px;">
-        [ Bottom Ad Space - Responsive Banner ]
-      </div>
+    <!-- Main Content Card -->
+    <div class="content-card">
+      <ul class="item-list" id="file-list">
+        <!-- Dynamic Directory List -->
+      </ul>
     </div>
 
   </div>
@@ -366,11 +278,10 @@
       });
     }
 
-    // Breadcrumb click handler: Slice breadcrumbs & push new state to browser history
+    // Breadcrumb click handler: Slice breadcrumbs & push state to browser history
     function navigateToBreadcrumb(index) {
       breadcrumbStack = breadcrumbStack.slice(0, index + 1);
       
-      // Update browser history state
       history.pushState({ stack: JSON.parse(JSON.stringify(breadcrumbStack)) }, '');
 
       const targetFolder = breadcrumbStack[index];
@@ -392,7 +303,6 @@
       const cleanName = folderName || 'Folder';
       breadcrumbStack.push({ id: folderId, name: cleanName });
 
-      // Save new state in browser navigation stack
       history.pushState({ stack: JSON.parse(JSON.stringify(breadcrumbStack)) }, '');
 
       fetchFolderContents(folderId);
@@ -403,7 +313,6 @@
       if (event.state && event.state.stack) {
         breadcrumbStack = event.state.stack;
       } else {
-        // Fallback to Home if popped back to initial page load
         breadcrumbStack = [{ id: '', name: 'Home' }];
       }
 
@@ -411,7 +320,7 @@
       fetchFolderContents(currentFolder.id);
     };
 
-    // Handles fetching & rendering folder UI
+    // Handles fetching & rendering folder UI using relative URL for hosted environments
     async function fetchFolderContents(folderId = '') {
       const listEl = document.getElementById('file-list');
       updateBreadcrumbs();

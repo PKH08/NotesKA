@@ -54,10 +54,24 @@ app.listen(PORT, () => {
 let auth;
 
 if (process.env.GOOGLE_JSON_KEY) {
-  auth = new google.auth.GoogleAuth({
-    credentials: JSON.parse(process.env.GOOGLE_JSON_KEY),
-    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
-  });
+  try {
+    // Parse JSON string safely
+    const credentials = typeof process.env.GOOGLE_JSON_KEY === 'string' 
+      ? JSON.parse(process.env.GOOGLE_JSON_KEY) 
+      : process.env.GOOGLE_JSON_KEY;
+
+    // Replace escaped newlines if private_key gets flattened by Render
+    if (credentials.private_key) {
+      credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+    }
+
+    auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/drive.readonly'],
+    });
+  } catch (err) {
+    console.error('Failed to parse GOOGLE_JSON_KEY environment variable:', err);
+  }
 } else {
   auth = new google.auth.GoogleAuth({
     keyFile: path.join(__dirname, 'service-account-key.json'),
