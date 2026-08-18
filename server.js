@@ -1,5 +1,3 @@
-require('dotenv').config();
-
 const express = require('express');
 const { google } = require('googleapis');
 const cors = require('cors');
@@ -7,15 +5,14 @@ const path = require('path');
 
 const app = express();
 app.use(cors());
+app.use(express.static(__dirname));
 
-const FOLDER_ID = '1_JvyLzENHeXDc743WSt68ix5JTcoHEVo';
-
+// Google Drive Auth Setup
 let auth;
-
 if (process.env.GOOGLE_JSON_KEY) {
   try {
-    const credentials = typeof process.env.GOOGLE_JSON_KEY === 'string'
-      ? JSON.parse(process.env.GOOGLE_JSON_KEY)
+    const credentials = typeof process.env.GOOGLE_JSON_KEY === 'string' 
+      ? JSON.parse(process.env.GOOGLE_JSON_KEY) 
       : process.env.GOOGLE_JSON_KEY;
 
     if (credentials.private_key) {
@@ -27,11 +24,7 @@ if (process.env.GOOGLE_JSON_KEY) {
       scopes: ['https://www.googleapis.com/auth/drive.readonly'],
     });
   } catch (err) {
-    console.error('Failed to parse GOOGLE_JSON_KEY environment variable:', err);
-    auth = new google.auth.GoogleAuth({
-      keyFile: path.join(__dirname, 'service-account-key.json'),
-      scopes: ['https://www.googleapis.com/auth/drive.readonly'],
-    });
+    console.error('Failed to parse GOOGLE_JSON_KEY:', err);
   }
 } else {
   auth = new google.auth.GoogleAuth({
@@ -41,16 +34,34 @@ if (process.env.GOOGLE_JSON_KEY) {
 }
 
 const drive = google.drive({ version: 'v3', auth });
+const FOLDER_ID = '1_JvyLzENHeXDc743WSt68ix5JTcoHEVo';
 
-// 1. Serve static files (index.html) from the project folder
-app.use(express.static(__dirname));
+// Change this version ID whenever you post an update so the notification badge lights up for users
+const CURRENT_UPDATE_VERSION = 'v1.1.0';
 
-// 2. Serve index.html on root access
+const announcements = [
+  {
+    id: 'v1.1.0',
+    date: 'August 18, 2026',
+    title: 'New Question Bank & Notes Uploaded',
+    details: 'Added 2026 Model Question Papers and Unit 3 Notes to the Notes directory.'
+  }
+];
+
+// Root Route
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// 3. API endpoint for file data
+// Updates / Announcements Endpoint
+app.get('/api/updates', (req, res) => {
+  res.json({
+    latestVersion: CURRENT_UPDATE_VERSION,
+    announcements: announcements
+  });
+});
+
+// Drive Files Endpoint
 app.get('/api/files', async (req, res) => {
   const folderId = req.query.folderId || FOLDER_ID;
 
@@ -59,7 +70,6 @@ app.get('/api/files', async (req, res) => {
       q: `'${folderId}' in parents and trashed = false`,
       fields: 'files(id, name, mimeType, webViewLink, webContentLink)',
     });
-
     res.json(response.data.files);
   } catch (error) {
     console.error('Error fetching files:', error);
@@ -67,9 +77,7 @@ app.get('/api/files', async (req, res) => {
   }
 });
 
-// Use environment port or default to 3000
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
-  console.log(`NotesKA server running on port ${PORT}`);
+  console.log(`NotesKA running on port ${PORT}`);
 });
