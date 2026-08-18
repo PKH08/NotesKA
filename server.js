@@ -36,27 +36,9 @@ if (process.env.GOOGLE_JSON_KEY) {
 const drive = google.drive({ version: 'v3', auth });
 const FOLDER_ID = '1_JvyLzENHeXDc743WSt68ix5JTcoHEVo';
 
-const CURRENT_UPDATE_VERSION = 'v1.1.0';
-const announcements = [
-  {
-    id: 'v1.1.0',
-    date: 'August 18, 2026',
-    title: 'New Question Bank & Notes Uploaded',
-    details: 'Added 2026 Model Question Papers and Unit 3 Notes to the Notes directory.'
-  }
-];
-
 // Root Route
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// Updates Endpoint
-app.get('/api/updates', (req, res) => {
-  res.json({
-    latestVersion: CURRENT_UPDATE_VERSION,
-    announcements: announcements
-  });
 });
 
 // Drive Files by Folder ID
@@ -75,7 +57,7 @@ app.get('/api/files', async (req, res) => {
   }
 });
 
-// Global Search Endpoint across Drive
+// Global Search Endpoint
 app.get('/api/search', async (req, res) => {
   const term = req.query.q || '';
   if (!term.trim()) {
@@ -83,7 +65,6 @@ app.get('/api/search', async (req, res) => {
   }
 
   try {
-    // Search by file name match (case-insensitive substring)
     const response = await drive.files.list({
       q: `name contains '${term.replace(/'/g, "\\'")}' and trashed = false`,
       fields: 'files(id, name, mimeType, webViewLink, webContentLink)',
