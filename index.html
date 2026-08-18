@@ -83,7 +83,7 @@
       margin: 2px 0 0 0;
     }
 
-    /* Notification Bell Button */
+    /* Notification Bell */
     .notify-btn {
       position: relative;
       background: var(--md-sys-color-surface-container);
@@ -115,7 +115,42 @@
       display: none;
     }
 
-    /* Top Notice Banner */
+    /* Search Bar */
+    .search-box {
+      display: flex;
+      align-items: center;
+      background: var(--md-sys-color-surface-container);
+      border: 1px solid var(--md-sys-color-outline);
+      border-radius: 28px;
+      padding: 6px 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      transition: all 0.2s ease;
+    }
+
+    .search-box:focus-within {
+      border-color: var(--md-sys-color-primary);
+      box-shadow: 0 1px 6px rgba(11, 87, 208, 0.2);
+    }
+
+    .search-box input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 15px;
+      font-family: inherit;
+      padding: 6px 10px;
+      background: transparent;
+      color: var(--md-sys-color-on-surface);
+    }
+
+    .search-clear-btn {
+      cursor: pointer;
+      display: none;
+      color: #747775;
+      font-size: 20px;
+    }
+
+    /* Update Notice Banner */
     .update-banner {
       display: none;
       align-items: center;
@@ -278,7 +313,7 @@
       100% { transform: rotate(360deg); }
     }
 
-    /* Modal Styling */
+    /* Modal */
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -347,7 +382,7 @@
 
   <div class="app-container">
     
-    <!-- Brand Header & Notification Trigger -->
+    <!-- Brand Header -->
     <div class="brand-header-wrap">
       <div class="brand-header">
         <div class="brand-logo">
@@ -365,7 +400,14 @@
       </button>
     </div>
 
-    <!-- Alert / Update Banner -->
+    <!-- Search Box -->
+    <div class="search-box">
+      <span class="material-symbols-outlined" style="color: #747775;">search</span>
+      <input type="text" id="search-input" placeholder="Search notes, modules, subjects..." oninput="handleSearchInput(event)" />
+      <span class="material-symbols-outlined search-clear-btn" id="search-clear-btn" onclick="clearSearch()">close</span>
+    </div>
+
+    <!-- Update Banner -->
     <div class="update-banner" id="update-banner">
       <div class="update-banner-content">
         <span class="material-symbols-outlined" style="color: var(--md-sys-color-primary);">campaign</span>
@@ -374,7 +416,7 @@
       <span class="update-banner-link" onclick="openUpdatesModal()">View</span>
     </div>
 
-    <!-- Navigation Breadcrumbs -->
+    <!-- Breadcrumbs -->
     <div class="breadcrumbs" id="breadcrumbs">
       <!-- Injected via JavaScript -->
     </div>
@@ -388,7 +430,7 @@
 
   </div>
 
-  <!-- What's New Modal -->
+  <!-- Updates Modal -->
   <div class="modal-overlay" id="modal-overlay" onclick="closeUpdatesModal(event)">
     <div class="modal-card" onclick="event.stopPropagation()">
       <div class="modal-header">
@@ -396,7 +438,7 @@
         <span class="material-symbols-outlined" style="cursor: pointer;" onclick="closeUpdatesModal()">close</span>
       </div>
       <div id="modal-content">
-        <!-- Injected from /api/updates -->
+        <!-- Announcements -->
       </div>
     </div>
   </div>
@@ -404,8 +446,129 @@
   <script>
     let breadcrumbStack = [{ id: '', name: 'Home' }];
     let latestUpdateVersion = '';
+    let searchDebounceTimer = null;
+    let isSearchActive = false;
 
-    // Check updates and handle notifications
+    // Search Logic with Debounce
+    function handleSearchInput(e) {
+      const query = e.target.value.trim();
+      const clearBtn = document.getElementById('search-clear-btn');
+      
+      clearBtn.style.display = query ? 'block' : 'none';
+
+      clearTimeout(searchDebounceTimer);
+      if (!query) {
+        if (isSearchActive) {
+          clearSearch();
+        }
+        return;
+      }
+
+      // Debounce API calls by 300ms
+      searchDebounceTimer = setTimeout(() => {
+        performSearch(query);
+      }, 300);
+    }
+
+    function clearSearch() {
+      const searchInput = document.getElementById('search-input');
+      searchInput.value = '';
+      document.getElementById('search-clear-btn').style.display = 'none';
+      isSearchActive = false;
+      document.getElementById('breadcrumbs').style.display = 'flex';
+      
+      const currentFolder = breadcrumbStack[breadcrumbStack.length - 1];
+      fetchFolderContents(currentFolder.id);
+    }
+
+    async function performSearch(query) {
+      isSearchActive = true;
+      document.getElementById('breadcrumbs').style.display = 'none';
+      const listEl = document.getElementById('file-list');
+
+      listEl.innerHTML = `
+        <div class="state-container">
+          <span class="material-symbols-outlined spinner">progress_activity</span>
+          <p style="margin-top: 12px;">Searching "${query}"...</p>
+        </div>
+      `;
+
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        const files = await res.json();
+        
+        renderFilesList(files, `No matches found for "${query}".`);
+      } catch (err) {
+        listEl.innerHTML = `
+          <div class="state-container">
+            <span class="material-symbols-outlined" style="font-size: 48px; color: #d93025;">search_off</span>
+            <p style="margin-top: 8px; color: #d93025;">Error performing search.</p>
+          </div>
+        `;
+      }
+    }
+
+    // Render file & folder items
+    function renderFilesList(files, emptyMessage = 'No files or folders found here.') {
+      const listEl = document.getElementById('file-list');
+      listEl.innerHTML = '';
+
+      if (!files || files.length === 0) {
+        listEl.innerHTML = `
+          <div class="state-container">
+            <span class="material-symbols-outlined" style="font-size: 48px; color: #bdbdbd;">folder_open</span>
+            <p style="margin-top: 8px;">${emptyMessage}</p>
+          </div>
+        `;
+        return;
+      }
+
+      files.sort((a, b) => {
+        const aIsFolder = a.mimeType === 'application/vnd.google-apps.folder';
+        const bIsFolder = b.mimeType === 'application/vnd.google-apps.folder';
+        if (aIsFolder && !bIsFolder) return -1;
+        if (!aIsFolder && bIsFolder) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      files.forEach(file => {
+        const li = document.createElement('li');
+        li.className = 'item-row';
+        const { icon, isFolder } = getMaterialIcon(file.mimeType);
+
+        if (isFolder) {
+          li.innerHTML = `
+            <div class="item-info">
+              <span class="material-symbols-outlined item-icon folder-icon">${icon}</span>
+              <span class="item-name">${file.name}</span>
+            </div>
+            <button class="action-btn btn-folder">
+              <span>Open</span>
+              <span class="material-symbols-outlined" style="font-size: 16px;">arrow_forward</span>
+            </button>
+          `;
+          li.onclick = () => {
+            if (isSearchActive) {
+              clearSearch();
+            }
+            openSubfolder(file.id, file.name);
+          };
+        } else {
+          li.innerHTML = `
+            <div class="item-info">
+              <span class="material-symbols-outlined item-icon">${icon}</span>
+              <span class="item-name">${file.name}</span>
+            </div>
+            <a href="${file.webViewLink}" target="_blank" rel="noopener" class="action-btn btn-file">
+              <span>View</span>
+              <span class="material-symbols-outlined" style="font-size: 16px;">open_in_new</span>
+            </a>
+          `;
+        }
+        listEl.appendChild(li);
+      });
+    }
+
     async function checkNotifications() {
       try {
         const res = await fetch('/api/updates');
@@ -416,14 +579,12 @@
         latestUpdateVersion = data.latestVersion;
         const lastRead = localStorage.getItem('noteska_last_read_version');
 
-        // If user hasn't seen this version, display the badge and banner
         if (lastRead !== latestUpdateVersion) {
           document.getElementById('badge-dot').style.display = 'block';
           document.getElementById('update-banner').style.display = 'flex';
           document.getElementById('banner-text').textContent = data.announcements[0].title;
         }
 
-        // Populate modal content
         const modalEl = document.getElementById('modal-content');
         modalEl.innerHTML = data.announcements.map(item => `
           <div class="modal-item">
@@ -432,7 +593,6 @@
             <p class="modal-item-details">${item.details}</p>
           </div>
         `).join('');
-
       } catch (e) {
         console.error('Could not fetch announcements', e);
       }
@@ -440,7 +600,6 @@
 
     function openUpdatesModal() {
       document.getElementById('modal-overlay').style.display = 'flex';
-      // Mark notifications as read
       if (latestUpdateVersion) {
         localStorage.setItem('noteska_last_read_version', latestUpdateVersion);
         document.getElementById('badge-dot').style.display = 'none';
@@ -529,58 +688,7 @@
       try {
         const res = await fetch(url);
         const files = await res.json();
-        listEl.innerHTML = '';
-
-        if (!files || files.length === 0) {
-          listEl.innerHTML = `
-            <div class="state-container">
-              <span class="material-symbols-outlined" style="font-size: 48px; color: #bdbdbd;">folder_open</span>
-              <p style="margin-top: 8px;">No files or folders found here.</p>
-            </div>
-          `;
-          return;
-        }
-
-        files.sort((a, b) => {
-          const aIsFolder = a.mimeType === 'application/vnd.google-apps.folder';
-          const bIsFolder = b.mimeType === 'application/vnd.google-apps.folder';
-          if (aIsFolder && !bIsFolder) return -1;
-          if (!aIsFolder && bIsFolder) return 1;
-          return a.name.localeCompare(b.name);
-        });
-
-        files.forEach(file => {
-          const li = document.createElement('li');
-          li.className = 'item-row';
-          const { icon, isFolder } = getMaterialIcon(file.mimeType);
-
-          if (isFolder) {
-            li.innerHTML = `
-              <div class="item-info">
-                <span class="material-symbols-outlined item-icon folder-icon">${icon}</span>
-                <span class="item-name">${file.name}</span>
-              </div>
-              <button class="action-btn btn-folder">
-                <span>Open</span>
-                <span class="material-symbols-outlined" style="font-size: 16px;">arrow_forward</span>
-              </button>
-            `;
-            li.onclick = () => openSubfolder(file.id, file.name);
-          } else {
-            li.innerHTML = `
-              <div class="item-info">
-                <span class="material-symbols-outlined item-icon">${icon}</span>
-                <span class="item-name">${file.name}</span>
-              </div>
-              <a href="${file.webViewLink}" target="_blank" rel="noopener" class="action-btn btn-file">
-                <span>View</span>
-                <span class="material-symbols-outlined" style="font-size: 16px;">open_in_new</span>
-              </a>
-            `;
-          }
-          listEl.appendChild(li);
-        });
-
+        renderFilesList(files);
       } catch (err) {
         listEl.innerHTML = `
           <div class="state-container">
