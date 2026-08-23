@@ -240,6 +240,30 @@
       color: #5f6368;
     }
 
+    .payment-panel {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 20px;
+      background: #fff8e1;
+      border: 1px solid #f1d58a;
+      border-radius: var(--md-shape-corner-medium);
+    }
+
+    .payment-copy { font-size: 14px; color: #5f6368; }
+    .payment-copy strong { display: block; color: #1f1f1f; margin-bottom: 4px; }
+    .payment-controls { display: flex; align-items: center; gap: 8px; }
+    .payment-controls input { width: 90px; padding: 9px 10px; border: 1px solid #d9c477; border-radius: 8px; font: inherit; }
+    .pay-btn { background: var(--md-sys-color-primary); color: white; }
+    .pay-btn:disabled { opacity: 0.6; cursor: wait; }
+    .payment-status { margin: 0; font-size: 13px; }
+
+    @media (max-width: 560px) {
+      .payment-panel { align-items: stretch; flex-direction: column; }
+      .payment-controls { justify-content: space-between; }
+    }
+
     .spinner {
       font-size: 32px;
       animation: spin 1s linear infinite;
@@ -266,6 +290,19 @@
       </div>
     </div>
 
+    <div class="payment-panel">
+      <div class="payment-copy">
+        <strong>Support NotesKA</strong>
+        Make a secure contribution through Razorpay.
+        <p class="payment-status" id="payment-status" aria-live="polite"></p>
+      </div>
+      <div class="payment-controls">
+        <label for="payment-amount">INR</label>
+        <input id="payment-amount" type="number" min="1" step="1" value="1" aria-label="Payment amount in Indian rupees" />
+        <button class="action-btn pay-btn" id="pay-button" type="button" onclick="startPayment()">Pay now</button>
+      </div>
+    </div>
+
     <!-- Search Box -->
     <div class="search-box">
       <span class="material-symbols-outlined" style="color: #747775;">search</span>
@@ -287,7 +324,76 @@
 
   </div>
 
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <script>
+    async function startPayment() {
+      const button = document.getElementById('pay-button');
+      const status = document.getElementById('payment-status');
+      const amount = Math.round(Number(document.getElementById('payment-amount').value) * 100);
+      if (!Number.isInteger(amount) || amount < 100) {
+        status.textContent = 'Enter an amount of at least INR 1.';
+        return;
+      }
+
+      button.disabled = true;
+      status.textContent = 'Preparing secure checkout...';
+      try {
+        const [configResponse, orderResponse] = await Promise.all([
+          fetch('/api/razorpay-config'),
+          fetch('/api/create-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount, currency: 'INR' })
+          })
+        ]);
+        const config = await configResponse.json();
+        const order = await orderResponse.json();
+        if (!configResponse.ok) throw new Error(config.error || 'Razorpay is not configured.');
+        if (!orderResponse.ok) throw new Error(order.error || 'Unable to create payment order.');
+
+        const checkout = new Razorpay({
+          key: config.key_id,
+          amount: order.amount,
+          currency: order.currency,
+          name: 'NotesKA',
+          description: 'NotesKA contribution',
+          order_id: order.order_id,
+          handler: verifyPayment,
+          modal: { ondismiss: () => { status.textContent = 'Payment cancelled.'; button.disabled = false; } }
+        });
+        checkout.on('payment.failed', response => {
+          status.textContent = response.error.description || 'Payment failed. Please try again.';
+          button.disabled = false;
+        });
+        checkout.open();
+      } catch (error) {
+        status.textContent = error.message;
+        button.disabled = false;
+      }
+    }
+
+    async function verifyPayment(response) {
+      const status = document.getElementById('payment-status');
+      try {
+        const verification = await fetch('/api/verify-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_signature: response.razorpay_signature
+          })
+        });
+        const result = await verification.json();
+        if (!verification.ok) throw new Error(result.error || 'Payment verification failed.');
+        status.textContent = result.message;
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        document.getElementById('pay-button').disabled = false;
+      }
+    }
+
     let breadcrumbStack = [{ id: '', name: 'Home' }];
     let searchDebounceTimer = null;
     let isSearchActive = false;
