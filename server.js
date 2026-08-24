@@ -12,10 +12,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+function createRazorpayClient() {
+  const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } = process.env;
+  if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) return null;
+  return new Razorpay({ key_id: RAZORPAY_KEY_ID, key_secret: RAZORPAY_KEY_SECRET });
+}
 
 // Google Drive Auth Setup
 let auth;
@@ -51,6 +52,16 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+app.get('/api/health', (req, res) => {
+  const razorpayConfigured = Boolean(
+    process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
+  );
+  res.status(razorpayConfigured ? 200 : 503).json({
+    status: razorpayConfigured ? 'ok' : 'degraded',
+    razorpayConfigured,
+  });
+});
+
 app.get('/api/razorpay-config', (req, res) => {
   if (!process.env.RAZORPAY_KEY_ID) {
     return res.status(500).json({ error: 'Razorpay is not configured' });
@@ -62,6 +73,11 @@ app.post('/api/create-order', async (req, res) => {
   const amount = Number(req.body.amount);
   if (!Number.isInteger(amount) || amount < 100) {
     return res.status(400).json({ error: 'Amount must be at least 100 paise' });
+  }
+
+  const razorpay = createRazorpayClient();
+  if (!razorpay) {
+    return res.status(500).json({ error: 'Razorpay not configured on server' });
   }
 
   try {
@@ -82,6 +98,9 @@ app.post('/api/verify-payment', (req, res) => {
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
   if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
     return res.status(400).json({ error: 'Missing payment verification fields' });
+  }
+  if (!process.env.RAZORPAY_KEY_SECRET) {
+    return res.status(500).json({ error: 'Razorpay secret is not configured on server' });
   }
 
   const expectedSignature = crypto
