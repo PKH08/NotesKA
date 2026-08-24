@@ -1,12 +1,11 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
 const { google } = require('googleapis');
 const cors = require('cors');
 const crypto = require('crypto');
 const Razorpay = require('razorpay');
-const path = require('path');
-
 const app = express();
 app.use(cors());
 app.use(express.json());
