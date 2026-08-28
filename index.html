@@ -346,10 +346,16 @@
             body: JSON.stringify({ amount, currency: 'INR' })
           })
         ]);
+        if (!configResponse.ok) {
+          const config = await configResponse.json().catch(() => ({ error: 'Razorpay is not configured.' }));
+          throw new Error(config.error || 'Razorpay is not configured.');
+        }
+        if (!orderResponse.ok) {
+          const order = await orderResponse.json().catch(() => ({ error: 'Unable to create payment order.' }));
+          throw new Error(order.error || 'Unable to create payment order.');
+        }
         const config = await configResponse.json();
         const order = await orderResponse.json();
-        if (!configResponse.ok) throw new Error(config.error || 'Razorpay is not configured.');
-        if (!orderResponse.ok) throw new Error(order.error || 'Unable to create payment order.');
 
         const checkout = new Razorpay({
           key: config.key_id,

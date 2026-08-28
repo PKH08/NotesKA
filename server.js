@@ -1,5 +1,11 @@
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+// FIXED: Standardized dotenv config. It will now automatically find the .env file in the root directory.
+const dotenvResult = require('dotenv').config();
+
+if (dotenvResult.error) {
+  console.warn('⚠️ Note: No .env file found locally. The server will rely on system environment variables (this is expected behavior for live hosting).');
+}
 
 const express = require('express');
 const { google } = require('googleapis');
@@ -7,14 +13,22 @@ const cors = require('cors');
 const crypto = require('crypto');
 const Razorpay = require('razorpay');
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
+function getRazorpayCredentials() {
+  return {
+    keyId: process.env.RAZORPAY_KEY_ID?.trim(),
+    keySecret: process.env.RAZORPAY_KEY_SECRET?.trim(),
+  };
+}
+
 function createRazorpayClient() {
-  const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } = process.env;
-  if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) return null;
-  return new Razorpay({ key_id: RAZORPAY_KEY_ID, key_secret: RAZORPAY_KEY_SECRET });
+  const { keyId, keySecret } = getRazorpayCredentials();
+  if (!keyId || !keySecret) return null;
+  return new Razorpay({ key_id: keyId, key_secret: keySecret });
 }
 
 // Google Drive Auth Setup
@@ -52,9 +66,8 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  const razorpayConfigured = Boolean(
-    process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
-  );
+  const { keyId, keySecret } = getRazorpayCredentials();
+  const razorpayConfigured = Boolean(keyId && keySecret);
   res.status(razorpayConfigured ? 200 : 503).json({
     status: razorpayConfigured ? 'ok' : 'degraded',
     razorpayConfigured,
@@ -62,10 +75,11 @@ app.get('/api/health', (req, res) => {
 });
 
 app.get('/api/razorpay-config', (req, res) => {
-  if (!process.env.RAZORPAY_KEY_ID) {
+  const { keyId, keySecret } = getRazorpayCredentials();
+  if (!keyId || !keySecret) {
     return res.status(500).json({ error: 'Razorpay is not configured' });
   }
-  res.json({ key_id: process.env.RAZORPAY_KEY_ID });
+  res.json({ key_id: keyId });
 });
 
 app.post('/api/create-order', async (req, res) => {
@@ -87,9 +101,18 @@ app.post('/api/create-order', async (req, res) => {
     });
     res.json({ order_id: order.id, amount: order.amount, currency: order.currency });
   } catch (error) {
-    console.error('Error creating Razorpay order:', error);
-    const status = error.statusCode === 401 || error.statusCode === 400 ? error.statusCode : 500;
-    res.status(status).json({ error: 'Failed to create payment order' });
+    console.error('Error creating Razorpay order:', error.message || error);
+    let status = 500;
+    let message = 'Failed to create payment order';
+    
+    if (error.statusCode === 401 || error.statusCode === 403) {
+      status = 401;
+      message = 'Razorpay credentials are invalid or expired. Please configure valid API keys.';
+    } else if (error.statusCode === 400) {
+      status = 400;
+      message = error.message || 'Invalid payment parameters';
+    }
+    res.status(status).json({ error: message });
   }
 });
 
@@ -98,12 +121,13 @@ app.post('/api/verify-payment', (req, res) => {
   if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
     return res.status(400).json({ error: 'Missing payment verification fields' });
   }
-  if (!process.env.RAZORPAY_KEY_SECRET) {
+  const { keySecret } = getRazorpayCredentials();
+  if (!keySecret) {
     return res.status(500).json({ error: 'Razorpay secret is not configured on server' });
   }
 
   const expectedSignature = crypto
-    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+    .createHmac('sha256', keySecret)
     .update(`${razorpay_order_id}|${razorpay_payment_id}`)
     .digest('hex');
   const signaturesMatch = expectedSignature.length === razorpay_signature.length &&
@@ -154,4 +178,9 @@ app.get('/api/search', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`NotesKA running on port ${PORT}`);
+  
+  // Diagnostic logs to verify environment variables loaded properly
+  const { keyId, keySecret } = getRazorpayCredentials();
+  console.log(`Razorpay Key ID Status: ${keyId ? '✅ Loaded' : '❌ Missing'}`);
+  console.log(`Razorpay Key Secret Status: ${keySecret ? '✅ Loaded' : '❌ Missing'}`);
 });
